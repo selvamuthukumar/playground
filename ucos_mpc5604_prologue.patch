@@ -1,0 +1,39 @@
+Saw a strange behaviour on Micrium uCOS (MPC5604 or MPC5XXX) platform.
+"if", "while" or any other conditional statements behaved unexpectedly.
+Here is the fix for the issue:
+
+Conditional statements may get implemented with two instructions by the compiler.
+Say, an "if" statement may be implemented with
+
+cmpli - Updates the condition register (CR) based on operands
+bc    - Checks CR and decides to branch or not.
+
+If an interrupt occurs in between these two instructions, interrupt handler may
+use some other instruction that can update CR. OS code should save CR (along
+with all other registers) before calling interrupt handler and restore CR after
+interrupt handler. OS had the code for saving/restore. But save/restore code
+used instructions that affects CR (e_add2i.). Replacing those with the
+instructions those does not update CR (e_add16i).
+
+Index: include/ucos/uc-cpu/os_cpu_a.inc
+===================================================================
+--- include/ucos/uc-cpu/os_cpu_a.inc	(revision 27)
++++ include/ucos/uc-cpu/os_cpu_a.inc	(working copy)
+@@ -135,7 +135,7 @@
+ #*                                         PROLOGUE DEFINITION
+ #*********************************************************************************************************
+ prologue:       .macro
+-        e_add2i. r1, -STACK_FRAME_SIZE
++        e_add16i r1, r1, -STACK_FRAME_SIZE
+         e_stwu  r1,    0(r1)
+         e_stw   r0,  XR0(r1)
+ 
+@@ -319,7 +319,7 @@
+         mtspr   SRR0,r0
+ 
+         e_lwz   r0,  XR0(r1)
+-        e_add2i. r1, STACK_FRAME_SIZE
++        e_add16i r1, r1, STACK_FRAME_SIZE
+     .endm
+ 
+ 
